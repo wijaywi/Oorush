@@ -140,6 +140,7 @@ Then start the node:
 
 ```text
 cargo run --bin oorush-node -- --listen 127.0.0.1:18444 \
+  --http-listen 127.0.0.1:18445 \
   --state node-chain.json --wallet node-wallet.json --initial-balance 1000000
 ```
 
@@ -187,6 +188,26 @@ Transactions and blocks use the JSON structures in `src/blockchain.rs` and
 must carry valid Dilithium5 signatures. The node serializes access to chain
 state with a mutex and returns explicit errors for malformed or invalid
 requests.
+
+### Read-only node status API
+
+Pass `--http-listen` to enable the real read-only HTTP API. It reads the
+running node's current chain state and validator wallet metadata; it does not
+accept transactions, private keys, or signing commands:
+
+```text
+curl http://127.0.0.1:18445/health
+curl http://127.0.0.1:18445/status
+curl http://127.0.0.1:18445/node/info
+curl http://127.0.0.1:18445/block/latest
+```
+
+`/status` returns live fields such as `height`, `pending`, `validators`,
+`utxos`, `balance`, `walletAddress`, `walletPublicKey`, `walletState`, and
+`latestHash`. The HTTP API is loopback-only by design. Netlify cannot reach
+`127.0.0.1`; to connect the dashboard, place an authenticated HTTPS
+read-only gateway or tunnel in front of this API and set `OORUSH_STATUS_URL`.
+Do not expose the unauthenticated API directly to the public internet.
 
 ## Wallet and piano artifact
 

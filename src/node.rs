@@ -33,6 +33,10 @@ const MAX_RESPONSE: usize = 8 * 1024 * 1024;
 const MAX_WORKERS: usize = 32;
 const MAX_QUEUED_CONNECTIONS: usize = 128;
 const IO_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+const HTTP_MAX_REQUEST: usize = 16 * 1024;
+const HTTP_MAX_RESPONSE: usize = 4 * 1024 * 1024;
+const HTTP_WORKERS: usize = 8;
+const HTTP_QUEUE: usize = 32;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "command", rename_all = "snake_case")]
@@ -48,6 +52,7 @@ enum Request {
 #[derive(Clone)]
 pub struct NodeConfig {
     pub listen: String,
+    pub http_listen: Option<String>,
     pub state: PathBuf,
     pub wallet: PathBuf,
     pub initial_balance: u64,
@@ -59,6 +64,44 @@ struct Node {
     wallet: wallet::Wallet,
     state_path: PathBuf,
     peer: Option<String>,
+}
+
+impl Node {
+    fn status_json(&self) -> serde_json::Value {
+        let state = self.state.lock().unwrap();
+        let latest = state.blocks.last();
+        let latest_hash = latest
+            .and_then(|block| block.hash().ok())
+            .map(hex::encode)
+            .unwrap_or_default();
+        let balance = state.balance(&self.wallet.address()).unwrap_or(0);
+        json!({
+            "ok": true,
+            "service": "oorush-node-status",
+            "chain": "OORUSH::LOCALNET::v2",
+            "height": state.blocks.len().saturating_sub(1),
+            "pending": state.pending_transactions.len(),
+            "validators": state.validators.len(),
+            "utxos": state.utxos.len(),
+            "balance": balance,
+            "walletAddress": self.wallet.address(),
+            "walletPublicKey": self.wallet.public_key_hex(),
+            "walletState": "encrypted_at_rest",
+            "latestHash": latest_hash,
+            "latestTimestamp": latest.map(|block| block.timestamp).unwrap_or(0),
+            "transport": "loopback-only",
+            "readOnly": true
+        })
+    }
+
+    fn latest_block_json(&self) -> serde_json::Value {
+        let state = self.state.lock().unwrap();
+        state
+            .blocks
+            .last()
+            .and_then(|block| serde_json::to_value(block).ok())
+            .unwrap_or_else(|| json!({"error":"missing_genesis"}))
+    }
 }
 
 pub fn run(config: NodeConfig) -> Result<()> {
@@ -118,6 +161,9 @@ pub fn run(config: NodeConfig) -> Result<()> {
         state_path: config.state,
         peer: config.peer,
     });
+    if let Some(http_listen) = config.http_listen {
+        spawn_status_api(http_listen, Arc::clone(&node))?;
+    }
     let (connections, receiver) = mpsc::sync_channel::<TcpStream>(MAX_QUEUED_CONNECTIONS);
     let receiver = Arc::new(Mutex::new(receiver));
     for _ in 0..MAX_WORKERS {
@@ -143,6 +189,73 @@ pub fn run(config: NodeConfig) -> Result<()> {
             Err(error) => eprintln!("node connection error: {error}"),
         }
     }
+    Ok(())
+}
+
+fn spawn_status_api(listen: String, node: Arc<Node>) -> Result<()> {
+    let address: SocketAddr = listen
+        .parse()
+        .context("HTTP status address must be an IP socket address")?;
+    if !address.ip().is_loopback() {
+        anyhow::bail!("unauthenticated HTTP status API must listen on localhost")
+    }
+    let listener = TcpListener::bind(address).context("bind HTTP status API")?;
+    let (connections, receiver) = mpsc::sync_channel::<TcpStream>(HTTP_QUEUE);
+    let receiver = Arc::new(Mutex::new(receiver));
+    for _ in 0..HTTP_WORKERS {
+        let receiver = Arc::clone(&receiver);
+        let node = Arc::clone(&node);
+        thread::spawn(move || {
+            while let Ok(stream) = receiver.lock().unwrap().recv() {
+                let _ = handle_http_status(stream, Arc::clone(&node));
+            }
+        });
+    }
+    thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            let _ = stream.set_read_timeout(Some(IO_TIMEOUT));
+            let _ = stream.set_write_timeout(Some(IO_TIMEOUT));
+            let _ = connections.try_send(stream);
+        }
+    });
+    Ok(())
+}
+
+fn handle_http_status(mut stream: TcpStream, node: Arc<Node>) -> Result<()> {
+    let mut request = String::new();
+    let mut reader = BufReader::new(stream.try_clone()?.take((HTTP_MAX_REQUEST + 1) as u64));
+    if reader.read_line(&mut request)? > HTTP_MAX_REQUEST {
+        return write_http_response(&mut stream, 413, json!({"error":"request_too_large"}));
+    }
+    let mut parts = request.split_whitespace();
+    let method = parts.next().unwrap_or_default();
+    let path = parts.next().unwrap_or_default();
+    if method != "GET" {
+        return write_http_response(&mut stream, 405, json!({"error":"method_not_allowed"}));
+    }
+    let body = match path {
+        "/health" => json!({"ok":true,"service":"oorush-node-status"}),
+        "/status" | "/node/info" => node.status_json(),
+        "/block/latest" => node.latest_block_json(),
+        _ => return write_http_response(&mut stream, 404, json!({"error":"not_found"})),
+    };
+    write_http_response(&mut stream, 200, body)
+}
+
+fn write_http_response(stream: &mut TcpStream, status: u16, body: serde_json::Value) -> Result<()> {
+    let body = serde_json::to_vec(&body)?;
+    if body.len() > HTTP_MAX_RESPONSE {
+        return Err(anyhow::anyhow!("HTTP response too large"));
+    }
+    let reason = match status {
+        200 => "OK",
+        404 => "Not Found",
+        405 => "Method Not Allowed",
+        413 => "Payload Too Large",
+        _ => "Error",
+    };
+    write!(stream, "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len())?;
+    stream.write_all(&body)?;
     Ok(())
 }
 
@@ -415,5 +528,34 @@ mod tests {
         });
         assert!(result.is_err());
         assert_eq!(state.serialize().unwrap(), before);
+    }
+
+    #[test]
+    fn status_payload_contains_live_public_metadata_only() {
+        let wallet = wallet::Wallet::generate();
+        let address = wallet.address();
+        let public_key = wallet.public_key_hex();
+        let node = Node {
+            state: Mutex::new(
+                ChainState::create_genesis(
+                    vec![crate::blockchain::TxOutput {
+                        address: address.clone(),
+                        amount: 7,
+                    }],
+                    vec![wallet.public_key.clone()],
+                    0,
+                )
+                .unwrap(),
+            ),
+            wallet,
+            state_path: PathBuf::from("test-state.json"),
+            peer: None,
+        };
+        let status = node.status_json();
+        assert_eq!(status["walletAddress"], address);
+        assert_eq!(status["walletPublicKey"], public_key);
+        assert_eq!(status["walletState"], "encrypted_at_rest");
+        assert_eq!(status["readOnly"], true);
+        assert!(status.get("secretKey").is_none());
     }
 }

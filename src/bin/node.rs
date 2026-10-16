@@ -10,6 +10,9 @@ use std::path::PathBuf;
 struct Cli {
     #[arg(long, default_value = "127.0.0.1:18444")]
     listen: String,
+    /// Optional read-only HTTP status API. It is restricted to loopback.
+    #[arg(long)]
+    http_listen: Option<String>,
     #[arg(long, default_value = "oorush-chain.json")]
     state: PathBuf,
     #[arg(long, default_value = "oorush-wallet.json")]
@@ -24,6 +27,7 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     run(NodeConfig {
         listen: cli.listen,
+        http_listen: cli.http_listen,
         state: cli.state,
         wallet: cli.wallet,
         initial_balance: cli.initial_balance,
