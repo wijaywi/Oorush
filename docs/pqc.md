@@ -14,6 +14,10 @@ This document describes the post-quantum cryptography used by the Oorush blockch
 - `src/wallet.rs` - encrypted wallet storage and address derivation.
 - `README.md` - build and node usage.
 
+The Rust dependency `pqcrypto-dilithium` exposes the historical
+CRYSTALS-Dilithium5 API. It must not be described as the standardized FIPS-204
+ML-DSA API without a deliberate dependency and protocol migration.
+
 ## ⚙️ Example configuration (draft)
 ```yaml
 pqc:

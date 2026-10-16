@@ -22,7 +22,10 @@ fn encrypted_wallet_round_trip_and_wrong_password_failure() {
     save_encrypted(&wallet, &path, b"correct horse battery staple").unwrap();
     let loaded = load_encrypted(&path, b"correct horse battery staple").unwrap();
     assert_eq!(loaded.public_key, wallet.public_key);
-    assert_eq!(loaded.secret_key.as_slice(), wallet.secret_key.as_slice());
+    assert_eq!(
+        loaded.secret_key_hex().as_str(),
+        wallet.secret_key_hex().as_str()
+    );
     assert!(load_encrypted(&path, b"wrong password").is_err());
     let _ = fs::remove_file(path);
 }

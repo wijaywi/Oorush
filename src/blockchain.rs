@@ -18,6 +18,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub type Hash = [u8; 32];
 pub type Address = String;
+pub const CHAIN_ID: &[u8] = b"OORUSH::LOCALNET::v2";
 
 const MAX_STATE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_BLOCKS: usize = 100_000;
@@ -26,6 +27,7 @@ const MAX_PENDING_TRANSACTIONS: usize = 10_000;
 const MAX_TX_INPUTS: usize = 1_000;
 const MAX_TX_OUTPUTS: usize = 1_000;
 const MAX_TX_BYTES: usize = 512 * 1024;
+const MAX_BLOCK_TIME_STEP: u64 = 86_400;
 
 type PersistedState = (
     Vec<Block>,
@@ -72,7 +74,8 @@ impl Transaction {
 
     pub fn signing_bytes(&self) -> Result<Vec<u8>> {
         serde_json::to_vec(&(
-            "OORUSH::TX::DILITHIUM5::v1",
+            "OORUSH::TX::DILITHIUM5::v2",
+            CHAIN_ID,
             &self.inputs,
             &self.outputs,
             &self.public_key,
@@ -108,6 +111,7 @@ pub struct Block {
     pub previous_hash: Hash,
     pub timestamp: u64,
     pub transactions: Vec<Transaction>,
+    pub validator_set_hash: Hash,
     pub validator_public_key: Vec<u8>,
     pub validator_signature: Vec<u8>,
 }
@@ -115,11 +119,13 @@ pub struct Block {
 impl Block {
     fn unsigned_bytes(&self) -> Result<Vec<u8>> {
         serde_json::to_vec(&(
-            "OORUSH::BLOCK::DILITHIUM5::v1",
+            "OORUSH::BLOCK::DILITHIUM5::v2",
+            CHAIN_ID,
             self.index,
             self.previous_hash,
             self.timestamp,
             &self.transactions,
+            self.validator_set_hash,
             &self.validator_public_key,
         ))
         .context("serialize block signing payload")
@@ -176,12 +182,14 @@ impl ChainState {
             sum.checked_add(output.amount)
                 .ok_or_else(|| anyhow!("genesis supply overflow"))
         })?;
+        let validator_set_hash = hash_validator_set(validators.values());
         let txid = genesis_tx.txid()?;
         let block = Block {
             index: 0,
             previous_hash: [0; 32],
             timestamp,
             transactions: vec![genesis_tx],
+            validator_set_hash,
             validator_public_key: Vec::new(),
             validator_signature: Vec::new(),
         };
@@ -229,7 +237,7 @@ impl ChainState {
             .map_err(|_| anyhow!("invalid validator secret key"))?;
         // Identify the registered public key by a short challenge. The secret key
         // never leaves this function and is never formatted or logged.
-        let challenge = b"OORUSH::POA::AUTH::v1";
+        let challenge = b"OORUSH::POA::AUTH::v2";
         let proof = detached_sign(challenge, &secret);
         let validator_public_key = self
             .validators
@@ -263,6 +271,15 @@ impl ChainState {
         if timestamp < self.blocks.last().map(|b| b.timestamp).unwrap_or(0) {
             bail!("block timestamp rollback")
         }
+        if timestamp
+            > self
+                .blocks
+                .last()
+                .map(|b| b.timestamp.saturating_add(MAX_BLOCK_TIME_STEP))
+                .unwrap_or(MAX_BLOCK_TIME_STEP)
+        {
+            bail!("block timestamp is too far ahead")
+        }
         if !self
             .validators
             .values()
@@ -274,11 +291,17 @@ impl ChainState {
             .map_err(|_| anyhow!("invalid validator secret key"))?;
         let public = PublicKey::from_bytes(validator_public_key)
             .map_err(|_| anyhow!("invalid validator public key"))?;
+        let auth_message = b"OORUSH::POA::AUTH::v2";
+        let auth_proof = detached_sign(auth_message, &secret);
+        if verify_detached_signature(&auth_proof, auth_message, &public).is_err() {
+            bail!("validator public key does not match secret key")
+        }
         let mut block = Block {
             index: self.blocks.len() as u64,
             previous_hash: self.blocks.last().unwrap().hash()?,
             timestamp,
             transactions,
+            validator_set_hash: self.blocks[0].validator_set_hash,
             validator_public_key: public.as_bytes().to_vec(),
             validator_signature: Vec::new(),
         };
@@ -303,6 +326,19 @@ impl ChainState {
         }
         if block.timestamp < self.blocks.last().unwrap().timestamp {
             bail!("block timestamp rollback")
+        }
+        if block.timestamp
+            > self
+                .blocks
+                .last()
+                .unwrap()
+                .timestamp
+                .saturating_add(MAX_BLOCK_TIME_STEP)
+        {
+            bail!("block timestamp is too far ahead")
+        }
+        if block.validator_set_hash != self.blocks[0].validator_set_hash {
+            bail!("validator set commitment mismatch")
         }
         if !self
             .validators
@@ -346,12 +382,16 @@ impl ChainState {
     pub fn serialize(&self) -> Result<Vec<u8>> {
         // JSON objects require string keys, so encode the ordered UTXO map as
         // pairs while retaining deterministic ordering and round-trip safety.
-        Ok(serde_json::to_vec(&(
+        let bytes = serde_json::to_vec(&(
             &self.blocks,
             self.utxos.iter().collect::<Vec<_>>(),
             &self.validators,
             &self.pending_transactions,
-        ))?)
+        ))?;
+        if bytes.len() > MAX_STATE_BYTES {
+            bail!("chain state exceeds size limit")
+        }
+        Ok(bytes)
     }
     pub fn deserialize(bytes: &[u8]) -> Result<Self> {
         if bytes.is_empty() || bytes.len() > MAX_STATE_BYTES {
@@ -436,6 +476,7 @@ impl ChainState {
         if genesis.index != 0
             || genesis.previous_hash != [0; 32]
             || genesis.transactions.len() != 1
+            || genesis.validator_set_hash == [0; 32]
             || !genesis.validator_public_key.is_empty()
             || !genesis.validator_signature.is_empty()
         {
@@ -452,6 +493,9 @@ impl ChainState {
             {
                 bail!("validator address does not match key")
             }
+        }
+        if genesis.validator_set_hash != hash_validator_set(self.validators.values()) {
+            bail!("validator set commitment mismatch")
         }
         let genesis_tx = &genesis.transactions[0];
         if !genesis_tx.inputs.is_empty()
@@ -490,6 +534,16 @@ impl ChainState {
             }
             if block.timestamp < self.blocks[index - 1].timestamp {
                 bail!("block timestamp rollback")
+            }
+            if block.timestamp
+                > self.blocks[index - 1]
+                    .timestamp
+                    .saturating_add(MAX_BLOCK_TIME_STEP)
+            {
+                bail!("block timestamp is too far ahead")
+            }
+            if block.validator_set_hash != genesis.validator_set_hash {
+                bail!("validator set commitment mismatch")
             }
             if !self
                 .validators
@@ -553,4 +607,14 @@ fn hash_bytes(bytes: &[u8]) -> Hash {
     let mut h = Sha256::new();
     h.update(bytes);
     h.finalize().into()
+}
+
+fn hash_validator_set<'a>(keys: impl Iterator<Item = &'a Vec<u8>>) -> Hash {
+    let mut hasher = Sha256::new();
+    hasher.update(b"OORUSH::VALIDATORS::v1");
+    for key in keys {
+        hasher.update((key.len() as u32).to_le_bytes());
+        hasher.update(key);
+    }
+    hasher.finalize().into()
 }

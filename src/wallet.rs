@@ -33,7 +33,7 @@ const KEY_CHECK_MESSAGE: &[u8] = b"OORUSH::WALLET::KEY_CHECK::v1";
 #[derive(Clone)]
 pub struct Wallet {
     pub public_key: Vec<u8>,
-    pub secret_key: Zeroizing<Vec<u8>>,
+    secret_key: Zeroizing<Vec<u8>>,
 }
 
 impl std::fmt::Debug for Wallet {
@@ -65,6 +65,10 @@ impl Wallet {
 
     pub fn secret_key_hex(&self) -> Zeroizing<String> {
         Zeroizing::new(hex::encode(self.secret_key.as_slice()))
+    }
+
+    pub(crate) fn secret_key_bytes(&self) -> &[u8] {
+        self.secret_key.as_slice()
     }
 }
 

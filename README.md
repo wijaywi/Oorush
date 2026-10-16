@@ -31,6 +31,8 @@ semantics for that initial state file; an existing state is loaded and is not
 replaced by genesis. Subsequent validated changes are persisted to the state
 file. State writes use a synced temporary file and a `.bak` recovery copy; a
 malformed primary state is rejected and a validated backup is attempted.
+Consensus objects use the versioned local chain domain `OORUSH::LOCALNET::v2`;
+state files created by earlier protocol revisions are not silently migrated.
 
 ## TCP protocol
 

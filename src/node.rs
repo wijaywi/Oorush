@@ -201,8 +201,7 @@ fn dispatch(request: Request, node: &Node) -> Result<serde_json::Value> {
                 let mut state = node.state.lock().unwrap();
                 mutate_and_persist(&mut state, &node.state_path, |next| {
                     let txs = next.pending_transactions.clone();
-                    let block =
-                        next.produce_block(txs, node.wallet.secret_key.as_slice(), now())?;
+                    let block = next.produce_block(txs, node.wallet.secret_key_bytes(), now())?;
                     next.validate_and_append_block(block.clone())?;
                     Ok(block)
                 })?
@@ -371,6 +370,29 @@ mod tests {
         fs::write(&path, b"not chain state").unwrap();
         assert!(load_state(&path).is_err());
         let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn missing_primary_state_recovers_from_valid_backup() {
+        let path = test_path("missing-primary.json");
+        let backup = backup_path(&path);
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&backup);
+        let wallet = wallet::Wallet::generate();
+        let state = ChainState::create_genesis(
+            vec![crate::blockchain::TxOutput {
+                address: wallet.address(),
+                amount: 1,
+            }],
+            vec![wallet.public_key],
+            0,
+        )
+        .unwrap();
+        fs::write(&backup, state.serialize().unwrap()).unwrap();
+        let recovered = load_state(&path).unwrap();
+        assert_eq!(recovered.blocks, state.blocks);
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(backup);
     }
 
     #[test]

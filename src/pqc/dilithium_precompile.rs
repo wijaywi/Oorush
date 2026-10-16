@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use pqcrypto_dilithium::dilithium5::{
-    detached_sign, keypair, verify_detached_signature, DetachedSignature as ConcreteDetachedSignature, PublicKey,
-    SecretKey,
+    detached_sign, keypair, verify_detached_signature,
+    DetachedSignature as ConcreteDetachedSignature, PublicKey, SecretKey,
 };
 use pqcrypto_traits::sign::DetachedSignature;
 
@@ -20,7 +20,7 @@ pub fn sign_detached(sk: &SecretKey, msg: &[u8]) -> Result<Vec<u8>> {
 pub fn verify_dilithium(pk: &PublicKey, msg: &[u8], sig: &[u8]) -> Result<bool> {
     let signature = ConcreteDetachedSignature::from_bytes(sig)
         .map_err(|_| anyhow!("Invalid signature bytes"))?;
-    
+
     // verify_detached_signature returns Result<(), VerificationError>
     // We map it to a boolean to match the test cases
     let is_valid = verify_detached_signature(&signature, msg, pk).is_ok();

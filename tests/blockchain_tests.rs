@@ -104,6 +104,12 @@ fn rejects_forged_state_and_duplicate_serialized_utxo() {
     let mut value: serde_json::Value = serde_json::from_slice(&chain.serialize().unwrap()).unwrap();
     value[1][0][1]["amount"] = serde_json::json!(101);
     assert!(ChainState::deserialize(&serde_json::to_vec(&value).unwrap()).is_err());
+
+    let mut value: serde_json::Value = serde_json::from_slice(&chain.serialize().unwrap()).unwrap();
+    let (other_public, _) = generate_keypair();
+    value[2][oorush::wallet::address_from_public_key(other_public.as_bytes())] =
+        serde_json::json!(other_public.as_bytes().to_vec());
+    assert!(ChainState::deserialize(&serde_json::to_vec(&value).unwrap()).is_err());
 }
 
 #[test]
@@ -142,4 +148,7 @@ fn rejects_money_creation_burning_bad_addresses_zero_outputs_and_timestamp_rollb
     burned.outputs[1].amount = 0;
     assert!(chain.submit_transaction(burned).is_err());
     assert!(chain.produce_block(Vec::new(), &validator, 0).is_err());
+    assert!(chain
+        .produce_block(Vec::new(), &validator, u64::MAX)
+        .is_err());
 }
