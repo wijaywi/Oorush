@@ -39,7 +39,7 @@ transactions.
 The gateway should return JSON with these optional fields:
 
 ```json
-{"height":12842,"healthyNodes":18,"transactionsPerHour":1284,"blockTime":"18.6s"}
+  {"height":12842,"healthyNodes":18,"transactionsPerHour":1284,"blockTime":"18.6s","walletAddress":"oorush1...","walletPublicKey":"dilithium5:...","walletState":"encrypted"}
 ```
 
 For a direct test endpoint, use `?api=https://gateway.example/status` in the

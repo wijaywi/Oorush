@@ -33,6 +33,8 @@
 
     <article class="card side"><h2>Latest block</h2><div class="block-meta"><div class="meta"><strong>Height</strong><span id="latestHeight">#1,284</span></div><div class="meta"><strong>Validator</strong><span id="latestValidator">local-validator</span></div><div class="meta"><strong>Block hash</strong><span class="hash" id="latestHash">8f2a…c91d</span></div><div class="meta"><strong>Protocol</strong><span>LOCALNET v2</span></div></div></article>
 
+    <article class="card wide"><h2>Validator wallet <span class="muted">/ public metadata only</span></h2><div class="block-meta"><div class="meta"><strong>Oorush address</strong><span class="hash" id="walletAddress">oorush1demo…</span></div><div class="meta"><strong>Public key</strong><span class="hash" id="walletPublicKey">dilithium5 · demo…</span></div><div class="meta"><strong>Wallet state</strong><span id="walletState">encrypted · demo</span></div><div class="meta"><strong>Secret key</strong><span>never exposed by dashboard</span></div></div></article>
+
     <article class="card wide"><h2>Recent chain events <span class="muted">/ read-only sample</span></h2><div class="rows"><div class="row event"><span><b>Block accepted</b> · validator signature verified</span><span>2m ago</span></div><div class="row event"><span><b>UTXO transition</b> · value conservation passed</span><span>5m ago</span></div><div class="row event"><span><b>Piano artifact</b> · deterministic WAV seed available</span><span>8m ago</span></div></div></article>
 
     <article class="card side"><h2>Gateway JSON</h2><pre class="json" id="json">{
@@ -49,7 +51,7 @@
 (() => {
   const query = new URLSearchParams(location.search);
   const api = query.get('api') || (window.OORUSH_CONFIG && window.OORUSH_CONFIG.api) || '/api/network-status';
-  const fallback = {height:1284,balance:1000000,validators:1,blockTime:'60s',latestHash:'8f2a…c91d',latestValidator:'local-validator'};
+  const fallback = {height:1284,balance:1000000,validators:1,blockTime:'60s',latestHash:'8f2a…c91d',latestValidator:'local-validator',walletAddress:'oorush1demo…',walletPublicKey:'dilithium5 · demo…',walletState:'encrypted · demo'};
   const $ = id => document.getElementById(id);
   function render(data, live) {
     const d = {...fallback, ...data};
@@ -62,6 +64,9 @@
     $('latestHeight').textContent = `#${Number(d.height).toLocaleString()}`;
     $('latestHash').textContent = d.latestHash ?? fallback.latestHash;
     $('latestValidator').textContent = d.latestValidator ?? fallback.latestValidator;
+    $('walletAddress').textContent = d.walletAddress ?? fallback.walletAddress;
+    $('walletPublicKey').textContent = d.walletPublicKey ?? fallback.walletPublicKey;
+    $('walletState').textContent = d.walletState ?? fallback.walletState;
     $('json').textContent = JSON.stringify({...d, source: live ? 'https-gateway' : 'demo', chain:'OORUSH::LOCALNET::v2'}, null, 2);
     $('status').innerHTML = `<span class="dot ${live ? 'live' : 'offline'}"></span><span>${live ? 'Live gateway · read-only' : 'Demo node · offline'}</span>`;
     $('bannerText').innerHTML = live ? '<strong>LIVE GATEWAY</strong> — Read-only normalized status data is being displayed.' : '<strong>DEMO OBSERVATORY</strong> — This page is a visual fallback; it does not claim live blockchain data.';
