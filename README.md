@@ -12,12 +12,13 @@ The Rust toolchain is pinned to `1.85.1` in `rust-toolchain.toml`, and
 project test command from the repository root:
 
 ```text
-make test
+cargo test --locked --offline
 ```
 
-`make test` runs the locked Cargo test suite and downloads the exact dependency
-versions recorded in `Cargo.lock` when they are not already cached. The same
-check can be run directly with `cargo test --locked`.
+The locked Cargo test suite runs in offline mode. On a clean host, the first
+dependency download must happen during setup or Docker build; the test command
+itself does not access the network. `make test` is also available as a local
+convenience wrapper around the same command.
 
 `.env.example` documents the safe loopback and `/data` deployment settings.
 The current binaries use command-line arguments rather than loading a dotenv
@@ -74,6 +75,15 @@ Build the image from the repository root:
 ```text
 docker build --tag oorush:local .
 ```
+
+Judge-style offline test after the image has been built:
+
+```text
+docker run --rm --network none oorush:local cargo test --locked --offline
+```
+
+The final image intentionally retains the pinned Rust toolchain and Cargo
+cache so this offline test can compile and run without contacting a registry.
 
 Create a host directory for the encrypted wallet and chain state, then generate
 the wallet. The wallet-generation command prompts for its password without

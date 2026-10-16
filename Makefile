@@ -1,4 +1,4 @@
 .PHONY: test
 
 test:
-	cargo test --locked
+	cargo test --locked --offline
