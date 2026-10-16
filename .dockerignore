@@ -1,0 +1,10 @@
+.git
+.github
+target
+oorush-data
+.env
+*.wallet.json
+*.chain.json
+*.bak
+*.tmp-*
+Scientific_Documentation_*.docx

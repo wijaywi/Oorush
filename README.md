@@ -15,9 +15,9 @@ project test command from the repository root:
 make test
 ```
 
-`make test` uses Cargo's offline mode, so after the locked dependencies have
-been downloaded once, it does not contact a package registry. The same check
-can be run directly with `CARGO_NET_OFFLINE=true cargo test --locked`.
+`make test` runs the locked Cargo test suite and downloads the exact dependency
+versions recorded in `Cargo.lock` when they are not already cached. The same
+check can be run directly with `cargo test --locked`.
 
 `.env.example` documents the safe loopback and `/data` deployment settings.
 The current binaries use command-line arguments rather than loading a dotenv
