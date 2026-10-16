@@ -85,6 +85,11 @@ docker run --rm --network none oorush:local cargo test --locked --offline
 The final image intentionally retains the pinned Rust toolchain and Cargo
 cache so this offline test can compile and run without contacting a registry.
 
+GitHub Actions verifies the same clean-Linux flow in
+`.github/workflows/linux-docker.yml`: it builds the image on Ubuntu and runs
+the tests with `--network none`. The workflow result is the authoritative
+Docker verification when Docker is unavailable on the development machine.
+
 Create a host directory for the encrypted wallet and chain state, then generate
 the wallet. The wallet-generation command prompts for its password without
 echoing it:

@@ -1,0 +1,31 @@
+name: Linux Docker Reproducibility
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker-build-and-offline-test:
+    name: Build Docker image and test offline
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build --tag oorush:ci .
+
+      - name: Run tests with networking disabled
+        run: docker run --rm --network none oorush:ci cargo test --locked --offline
+
+      - name: Check runtime binaries
+        run: |
+          docker run --rm --network none oorush:ci oorush-node --help
+          docker run --rm --network none oorush:ci oorush-wallet --help
