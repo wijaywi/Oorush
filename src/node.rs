@@ -14,7 +14,7 @@ use crate::{
     blockchain::{Block, ChainState, Transaction},
     wallet,
 };
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use rpassword::prompt_password;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -68,7 +68,7 @@ pub fn run(config: NodeConfig) -> Result<()> {
         anyhow::bail!("wallet password must not be empty");
     }
     let signing_wallet = wallet::load_encrypted(&config.wallet, password.as_bytes())?;
-    let chain = if config.state.exists() {
+    let chain = if config.state.exists() || backup_path(&config.state).exists() {
         load_state(&config.state)?
     } else {
         let chain = ChainState::create_genesis(
@@ -102,6 +102,14 @@ pub fn run(config: NodeConfig) -> Result<()> {
         .context("node listen address must be an IP socket address")?;
     if !address.ip().is_loopback() {
         anyhow::bail!("unauthenticated node must listen on localhost; use a loopback address")
+    }
+    if let Some(peer) = &config.peer {
+        let peer_address: SocketAddr = peer
+            .parse()
+            .context("peer address must be an IP socket address")?;
+        if !peer_address.ip().is_loopback() {
+            anyhow::bail!("unauthenticated peer connections must remain on localhost")
+        }
     }
     let listener = TcpListener::bind(address).context("bind node listener")?;
     let node = Arc::new(Node {
@@ -254,20 +262,21 @@ fn backup_path(path: &Path) -> PathBuf {
 }
 
 fn load_state(path: &Path) -> Result<ChainState> {
-    let primary = fs::read(path).context("read chain state")?;
-    match validate_loaded_state(&primary) {
-        Ok(state) => Ok(state),
-        Err(primary_error) => {
-            let backup = backup_path(path);
-            let bytes = fs::read(&backup).with_context(|| {
-                format!(
-                    "invalid chain state ({primary_error}); read recovery backup {}",
-                    backup.display()
-                )
-            })?;
-            validate_loaded_state(&bytes).context("validate recovery chain state")
-        }
-    }
+    let primary_error = match fs::read(path) {
+        Ok(primary) => match validate_loaded_state(&primary) {
+            Ok(state) => return Ok(state),
+            Err(error) => error,
+        },
+        Err(error) => anyhow!("read primary chain state: {error}"),
+    };
+    let backup = backup_path(path);
+    let bytes = fs::read(&backup).with_context(|| {
+        format!(
+            "invalid primary chain state ({primary_error}); read recovery backup {}",
+            backup.display()
+        )
+    })?;
+    validate_loaded_state(&bytes).context("validate recovery chain state")
 }
 
 fn validate_loaded_state(bytes: &[u8]) -> Result<ChainState> {

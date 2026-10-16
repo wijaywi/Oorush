@@ -173,8 +173,7 @@ impl ChainState {
         let genesis_tx = Transaction::unsigned(Vec::new(), allocations, Vec::new());
         let _genesis_supply = genesis_tx.outputs.iter().try_fold(0_u64, |sum, output| {
             validate_output(output)?;
-            sum
-                .checked_add(output.amount)
+            sum.checked_add(output.amount)
                 .ok_or_else(|| anyhow!("genesis supply overflow"))
         })?;
         let txid = genesis_tx.txid()?;
