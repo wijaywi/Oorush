@@ -144,6 +144,39 @@ cargo run --bin oorush-node -- --listen 127.0.0.1:18444 \
   --state node-chain.json --wallet node-wallet.json --initial-balance 1000000
 ```
 
+## PoA validator dashboard (`oorush-miner`)
+
+The `oorush-miner` binary is a small cross-platform GUI for research and
+education. Despite its historical binary name, it is **not** a proof-of-work
+miner: it performs no CPU mining, hash grinding, block production, transaction
+submission, or private-key handling. Oorush uses proof of authority (PoA), so
+the dashboard only observes a validator node through its read-only HTTP API.
+
+With a node running as above, launch the dashboard from another terminal:
+
+```text
+cargo run --release --bin oorush-miner
+```
+
+The status URL defaults to `http://127.0.0.1:18445`, the node TCP address is
+shown as `127.0.0.1:18444`, and the wallet path is shown as
+`oorush-wallet.json`. Edit the status URL or TCP address if your local node
+uses different ports, then choose **Refresh status**. The dashboard performs
+only a local `GET /status`; it accepts loopback HTTP URLs (`localhost`,
+`127.0.0.1`, or `::1`) and rejects external hosts and HTTPS. It displays live
+public chain and validator metadata, never passwords or private keys.
+
+Build the Windows GUI executable with:
+
+```text
+cargo build --release --bin oorush-miner
+```
+
+On Windows the output is `target\release\oorush-miner.exe`. The same source
+can be checked on Linux with Cargo; a native Windows build or Windows GUI run
+is still required to verify the platform-specific executable and windowing
+integration.
+
 On first start, the node creates a deterministic genesis (timestamp zero)
 allocating `--initial-balance` to the wallet address. It uses create-new
 semantics for that initial state file; an existing state is loaded and is not
