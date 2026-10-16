@@ -19,6 +19,21 @@ use std::collections::{BTreeMap, BTreeSet};
 pub type Hash = [u8; 32];
 pub type Address = String;
 
+const MAX_STATE_BYTES: usize = 16 * 1024 * 1024;
+const MAX_BLOCKS: usize = 100_000;
+const MAX_BLOCK_TRANSACTIONS: usize = 10_000;
+const MAX_PENDING_TRANSACTIONS: usize = 10_000;
+const MAX_TX_INPUTS: usize = 1_000;
+const MAX_TX_OUTPUTS: usize = 1_000;
+const MAX_TX_BYTES: usize = 512 * 1024;
+
+type PersistedState = (
+    Vec<Block>,
+    Vec<(OutPoint, TxOutput)>,
+    BTreeMap<Address, Vec<u8>>,
+    Vec<Transaction>,
+);
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct OutPoint {
     pub txid: Hash,
@@ -136,6 +151,10 @@ impl ChainState {
         validator_public_keys: Vec<Vec<u8>>,
         timestamp: u64,
     ) -> Result<Self> {
+        if allocations.is_empty() || allocations.len() > MAX_TX_OUTPUTS {
+            bail!("invalid genesis allocations")
+        }
+        let validator_count = validator_public_keys.len();
         let mut validators = BTreeMap::new();
         for key in validator_public_keys {
             let public =
@@ -145,10 +164,19 @@ impl ChainState {
                 key,
             );
         }
+        if validators.len() != validator_count {
+            bail!("duplicate validator public key")
+        }
         if validators.is_empty() {
             bail!("genesis requires at least one validator")
         }
         let genesis_tx = Transaction::unsigned(Vec::new(), allocations, Vec::new());
+        let _genesis_supply = genesis_tx.outputs.iter().try_fold(0_u64, |sum, output| {
+            validate_output(output)?;
+            sum
+                .checked_add(output.amount)
+                .ok_or_else(|| anyhow!("genesis supply overflow"))
+        })?;
         let txid = genesis_tx.txid()?;
         let block = Block {
             index: 0,
@@ -178,6 +206,9 @@ impl ChainState {
     }
 
     pub fn submit_transaction(&mut self, transaction: Transaction) -> Result<Hash> {
+        if self.pending_transactions.len() >= MAX_PENDING_TRANSACTIONS {
+            bail!("pending transaction limit exceeded")
+        }
         let pending_spent: BTreeSet<OutPoint> = self
             .pending_transactions
             .iter()
@@ -227,6 +258,12 @@ impl ChainState {
         validator_secret_key: &[u8],
         timestamp: u64,
     ) -> Result<Block> {
+        if transactions.len() > MAX_BLOCK_TRANSACTIONS {
+            bail!("too many transactions")
+        }
+        if timestamp < self.blocks.last().map(|b| b.timestamp).unwrap_or(0) {
+            bail!("block timestamp rollback")
+        }
         if !self
             .validators
             .values()
@@ -253,11 +290,20 @@ impl ChainState {
     }
 
     pub fn validate_and_append_block(&mut self, block: Block) -> Result<()> {
+        if self.blocks.len() >= MAX_BLOCKS || block.transactions.len() > MAX_BLOCK_TRANSACTIONS {
+            bail!("chain or block size limit exceeded")
+        }
+        if serde_json::to_vec(&block)?.len() > MAX_STATE_BYTES {
+            bail!("block too large")
+        }
         if block.index != self.blocks.len() as u64 {
             bail!("unexpected block index")
         }
         if block.previous_hash != self.blocks.last().unwrap().hash()? {
             bail!("invalid previous block hash")
+        }
+        if block.timestamp < self.blocks.last().unwrap().timestamp {
+            bail!("block timestamp rollback")
         }
         if !self
             .validators
@@ -309,18 +355,30 @@ impl ChainState {
         ))?)
     }
     pub fn deserialize(bytes: &[u8]) -> Result<Self> {
-        let (blocks, utxos, validators, pending_transactions): (
-            Vec<Block>,
-            Vec<(OutPoint, TxOutput)>,
-            BTreeMap<Address, Vec<u8>>,
-            Vec<Transaction>,
-        ) = serde_json::from_slice(bytes)?;
-        Ok(Self {
+        if bytes.is_empty() || bytes.len() > MAX_STATE_BYTES {
+            bail!("invalid or oversized chain state")
+        }
+        let (blocks, utxos, validators, pending_transactions): PersistedState =
+            serde_json::from_slice(bytes)?;
+        if blocks.is_empty()
+            || blocks.len() > MAX_BLOCKS
+            || pending_transactions.len() > MAX_PENDING_TRANSACTIONS
+        {
+            bail!("invalid chain state size")
+        }
+        let mut state = Self {
             blocks,
-            utxos: utxos.into_iter().collect(),
+            utxos: BTreeMap::new(),
             validators,
             pending_transactions,
-        })
+        };
+        for (point, output) in utxos {
+            if state.utxos.insert(point, output).is_some() {
+                bail!("duplicate serialized UTXO")
+            }
+        }
+        state.validate_persisted_state()?;
+        Ok(state)
     }
 
     fn validate_transaction(
@@ -329,8 +387,15 @@ impl ChainState {
         utxos: &BTreeMap<OutPoint, TxOutput>,
         spent: &BTreeSet<OutPoint>,
     ) -> Result<()> {
-        if tx.inputs.is_empty() || tx.outputs.is_empty() {
+        if tx.inputs.is_empty()
+            || tx.outputs.is_empty()
+            || tx.inputs.len() > MAX_TX_INPUTS
+            || tx.outputs.len() > MAX_TX_OUTPUTS
+        {
             bail!("transaction must have inputs and outputs")
+        }
+        if serde_json::to_vec(tx)?.len() > MAX_TX_BYTES {
+            bail!("transaction too large")
         }
         if !tx.verify_signature()? {
             bail!("invalid transaction signature")
@@ -354,14 +419,113 @@ impl ChainState {
                 .ok_or_else(|| anyhow!("input amount overflow"))?;
         }
         let output_total = tx.outputs.iter().try_fold(0u64, |sum, o| {
+            validate_output(o)?;
             sum.checked_add(o.amount)
                 .ok_or_else(|| anyhow!("output amount overflow"))
         })?;
-        if output_total > input_total {
-            bail!("insufficient input value")
+        if output_total != input_total {
+            bail!("transaction must conserve value")
         }
         Ok(())
     }
+
+    fn validate_persisted_state(&self) -> Result<()> {
+        let genesis = self
+            .blocks
+            .first()
+            .ok_or_else(|| anyhow!("missing genesis"))?;
+        if genesis.index != 0
+            || genesis.previous_hash != [0; 32]
+            || genesis.transactions.len() != 1
+            || !genesis.validator_public_key.is_empty()
+            || !genesis.validator_signature.is_empty()
+        {
+            bail!("invalid genesis block")
+        }
+        if self.validators.is_empty() {
+            bail!("missing validators")
+        }
+        for (address, key) in &self.validators {
+            let public =
+                PublicKey::from_bytes(key).map_err(|_| anyhow!("invalid validator key"))?;
+            if !crate::wallet::is_valid_address(address)
+                || crate::wallet::address_from_public_key(public.as_bytes()) != *address
+            {
+                bail!("validator address does not match key")
+            }
+        }
+        let genesis_tx = &genesis.transactions[0];
+        if !genesis_tx.inputs.is_empty()
+            || !genesis_tx.public_key.is_empty()
+            || !genesis_tx.signature.is_empty()
+        {
+            bail!("invalid genesis transaction")
+        }
+        for output in &genesis_tx.outputs {
+            validate_output(output)?;
+        }
+        if genesis_tx.outputs.len() > MAX_TX_OUTPUTS {
+            bail!("genesis output limit exceeded")
+        }
+        let mut expected = BTreeMap::new();
+        let genesis_id = genesis_tx.txid()?;
+        for (index, output) in genesis_tx.outputs.iter().enumerate() {
+            expected.insert(
+                OutPoint {
+                    txid: genesis_id,
+                    index: index as u32,
+                },
+                output.clone(),
+            );
+        }
+        for (index, block) in self.blocks.iter().enumerate().skip(1) {
+            if block.transactions.len() > MAX_BLOCK_TRANSACTIONS
+                || serde_json::to_vec(block)?.len() > MAX_STATE_BYTES
+            {
+                bail!("block size limit exceeded")
+            }
+            if block.index != index as u64
+                || block.previous_hash != self.blocks[index - 1].hash()?
+            {
+                bail!("invalid chain link")
+            }
+            if block.timestamp < self.blocks[index - 1].timestamp {
+                bail!("block timestamp rollback")
+            }
+            if !self
+                .validators
+                .values()
+                .any(|key| key == &block.validator_public_key)
+                || !block.verify_validator_signature()?
+            {
+                bail!("invalid block validator signature")
+            }
+            let mut spent = BTreeSet::new();
+            for tx in &block.transactions {
+                self.validate_transaction(tx, &expected, &spent)?;
+                apply_transaction(tx, &mut expected, &mut spent)?;
+            }
+        }
+        if expected != self.utxos {
+            bail!("UTXO set does not match chain replay")
+        }
+        let mut pending_spent = BTreeSet::new();
+        for tx in &self.pending_transactions {
+            self.validate_transaction(tx, &self.utxos, &pending_spent)?;
+            pending_spent.extend(tx.inputs.iter().map(|i| i.previous_output.clone()));
+        }
+        Ok(())
+    }
+}
+
+fn validate_output(output: &TxOutput) -> Result<()> {
+    if !crate::wallet::is_valid_address(&output.address) {
+        bail!("invalid output address")
+    }
+    if output.amount == 0 {
+        bail!("output amount must be nonzero")
+    }
+    Ok(())
 }
 
 fn apply_transaction(

@@ -39,3 +39,12 @@ fn wallet_save_never_overwrites_existing_file() {
     assert_eq!(fs::read(&path).unwrap(), original);
     let _ = fs::remove_file(path);
 }
+
+#[test]
+fn wallet_debug_redacts_secret_key() {
+    let wallet = Wallet::generate();
+    let debug = format!("{wallet:?}");
+    let secret = wallet.secret_key_hex();
+    assert!(debug.contains("[REDACTED]"));
+    assert!(!debug.contains(&*secret));
+}

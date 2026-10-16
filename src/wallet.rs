@@ -30,10 +30,20 @@ const SALT_LEN: usize = 16;
 const NONCE_LEN: usize = 12;
 const KEY_CHECK_MESSAGE: &[u8] = b"OORUSH::WALLET::KEY_CHECK::v1";
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Wallet {
     pub public_key: Vec<u8>,
     pub secret_key: Zeroizing<Vec<u8>>,
+}
+
+impl std::fmt::Debug for Wallet {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Wallet")
+            .field("public_key", &hex::encode(&self.public_key))
+            .field("secret_key", &"[REDACTED]")
+            .finish()
+    }
 }
 
 impl Wallet {
@@ -63,6 +73,14 @@ pub fn address_from_public_key(public_key: &[u8]) -> String {
     hasher.update(ADDRESS_DOMAIN);
     hasher.update(public_key);
     format!("oorush1{}", hex::encode(hasher.finalize()))
+}
+
+pub fn is_valid_address(address: &str) -> bool {
+    address.len() == 71
+        && address.starts_with("oorush1")
+        && address[7..]
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
 }
 
 #[derive(Serialize, Deserialize)]
@@ -160,7 +178,16 @@ pub fn save_encrypted(wallet: &Wallet, path: &Path, password: &[u8]) -> Result<(
 }
 
 pub fn load_encrypted(path: &Path, password: &[u8]) -> Result<Wallet> {
-    let file: FileFormat = serde_json::from_slice(&fs::read(path)?)?;
+    const MAX_WALLET_FILE_BYTES: u64 = 64 * 1024;
+    let metadata = fs::metadata(path)?;
+    if metadata.len() > MAX_WALLET_FILE_BYTES {
+        return Err(anyhow!("wallet file is too large"));
+    }
+    let bytes = fs::read(path)?;
+    if bytes.len() as u64 > MAX_WALLET_FILE_BYTES {
+        return Err(anyhow!("wallet file is too large"));
+    }
+    let file: FileFormat = serde_json::from_slice(&bytes)?;
     if file.format != 1
         || file.scheme != "dilithium5"
         || file.kdf.name != "argon2id"
