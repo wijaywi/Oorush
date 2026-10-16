@@ -5,12 +5,79 @@ a small proof-of-authority TCP node. It is intentionally an MVP: it does not
 provide Byzantine fault tolerance, fork choice, finality, peer discovery,
 transport security, or production authentication.
 
+## Reproducible setup
+
+The Rust toolchain is pinned to `1.85.1` in `rust-toolchain.toml`, and
+`Cargo.lock` is committed. Install Rust with rustup, then run the single
+project test command from the repository root:
+
+```text
+make test
+```
+
+`make test` uses Cargo's offline mode, so after the locked dependencies have
+been downloaded once, it does not contact a package registry. The same check
+can be run directly with `CARGO_NET_OFFLINE=true cargo test --locked`.
+
+`.env.example` documents the safe loopback and `/data` deployment settings.
+The current binaries use command-line arguments rather than loading a dotenv
+file; copy the example only if you need a local settings reference, and never
+put wallet passwords or private keys in it.
+
 The node protocol has no transport authentication. The node therefore accepts
 only loopback listen addresses (`127.0.0.1`, `::1`, or another loopback IP) by
 default; do not expose it on a LAN or the public internet. Adding remote access
 requires implementing and reviewing transport authentication first.
 
 ## Start a node
+
+### Docker
+
+Build the image from the repository root:
+
+```text
+docker build --tag oorush:local .
+```
+
+Create a host directory for the encrypted wallet and chain state, then generate
+the wallet. The wallet-generation command prompts for its password without
+echoing it:
+
+```text
+mkdir -p oorush-data
+docker run --rm -it --entrypoint oorush-wallet \
+  -v "$(pwd)/oorush-data:/data" oorush:local \
+  generate --output /data/node-wallet.json
+```
+
+Run the node with its persistent data directory mounted. The image defaults to
+the safe loopback listener `127.0.0.1:18444`; explicitly passing `--state` and
+`--wallet` documents the required files and keeps them outside the image:
+
+```text
+docker run --rm -it --name oorush-node \
+  -p 127.0.0.1:18444:18444 \
+  -v "$(pwd)/oorush-data:/data" \
+  oorush:local \
+  --listen 127.0.0.1:18444 \
+  --state /data/node-chain.json \
+  --wallet /data/node-wallet.json \
+  --initial-balance 1000000
+```
+
+The wallet password is requested interactively when the container starts. Keep
+`oorush-data/` out of version control: runtime wallet, state, passwords, and
+other secrets must never be committed or copied into the image. For a registry
+deployment, tag and push the image using your registry name, then run that
+image with the same persistent `/data` volume and loopback-safe arguments:
+
+```text
+docker tag oorush:local registry.example/oorush:0.1.0
+docker push registry.example/oorush:0.1.0
+```
+
+The node remains loopback-only by design. Do not publish it to a LAN or the
+public internet without implementing and reviewing transport authentication.
 
 First create an encrypted wallet (the password is read without echo):
 
