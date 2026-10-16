@@ -1,62 +1,96 @@
-# Coiwin: PQC Framework for Blockchain
+# Oorush blockchain MVP
 
-[![View Source Code on GitHub](https://img.shields.io/badge/View_on_GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/wijaywi/Coiwin)
-[![Download Coiwin Node](https://img.shields.io/badge/Download_Node-0052CC?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/wijaywi/Coiwin/releases)
+This repository contains an educational Dilithium5-signed UTXO blockchain and
+a small proof-of-authority TCP node. It is intentionally an MVP: it does not
+provide Byzantine fault tolerance, fork choice, finality, peer discovery,
+transport security, or production authentication.
 
-🌐 **Official Website:** [https://wijaywi.github.io/Coiwin](https://wijaywi.github.io/Coiwin)
+## Start a node
 
+First create an encrypted wallet (the password is read without echo):
 
-The **Coiwin PQC Framework** provides an open-source Rust module for integrating **Post-Quantum Cryptography (PQC)** into blockchain architectures. Specifically, it implements the NIST-standardized **Dilithium** digital signature scheme (CRYSTALS-Dilithium) to ensure transaction security against future quantum computer attacks.
-
-Originally developed as part of experimental research into quantum-resistant ledger technology, **Coiwin** has now been decoupled into a standalone cryptographic library to serve as an educational and technical resource for cryptography researchers and blockchain developers.
-
-## Features
-
-- **Dilithium Signatures:** Native Rust precompiles for Dilithium keypair generation, detached signing, and rigorous signature verification.
-- **Blockchain Agnostic:** Designed to be easily integrated into any consensus mechanism or smart contract execution environment.
-- **High Performance:** Built entirely in memory-safe and fast Rust.
-- **Educational Foundation:** Clean, un-obfuscated code serving as a blueprint for upgrading legacy ECDSA architectures to Quantum-Resistant architectures.
-
-## Usage & Demonstration
-
-This repository contains a simple binary to demonstrate the core functionality of the Dilithium signature lifecycle.
-
-To run the demonstration:
-```bash
-cargo run --features pqc-dilithium
-```
-
-### Expected Output
 ```text
-=== Coiwin Quantum-Resistant Cryptography Library ===
-This binary serves as a simple demonstration of Dilithium signatures.
-
-[1] Generating Dilithium Keypair...
-Public Key generated (2592 bytes)
-Secret Key generated (4864 bytes)
-
-[2] Signing message: Hello, Quantum World!
-Signature created (3293 bytes)
-
-[3] Verifying signature...
-Result: VERIFICATION SUCCESSFUL! The signature is valid.
+cargo run --bin oorush-wallet -- generate --output node-wallet.json
 ```
 
-## Repository Structure
+Then start the node:
 
-- `src/pqc/dilithium_precompile.rs` - Core Rust implementation of the Dilithium digital signature module.
-- `src/bin/node.rs` - Demonstration CLI.
-- `docs/pqc.md` - Additional documentation regarding Post-Quantum Cryptography concepts.
-- `contracts/DilithiumVerifier.sol` - Solidity smart contract for Dilithium verification on EVM-compatible chains.
+```text
+cargo run --bin oorush-node -- --listen 127.0.0.1:18444 \
+  --state node-chain.json --wallet node-wallet.json --initial-balance 1000000
+```
 
----
+On first start, the node creates a deterministic genesis (timestamp zero)
+allocating `--initial-balance` to the wallet address. It uses create-new
+semantics for that initial state file; an existing state is loaded and is not
+replaced by genesis. Subsequent validated changes are persisted to the state
+file.
 
-## Legal & Disclaimer
+## TCP protocol
 
-**IMPORTANT NOTICE:**
-This software is provided purely as an experimental, open-source research module.
+The protocol is newline-delimited UTF-8 JSON over TCP. Requests and responses
+are one JSON object per line; requests are limited to 1 MiB. Successful
+responses have `{"ok":true,"result":...}` and failures have
+`{"ok":false,"error":"..."}`.
 
-1. **Not a Cryptocurrency:** This repository DOES NOT contain any cryptocurrency wallet, node, or mining software. It is a cryptographic library.
-2. **Zero Liability:** As stated in the `LICENSE` (MIT License), this software is provided **"AS IS"**. The creators, authors, and contributors accept **ZERO LIABILITY** for any financial loss, hardware damage, or legal repercussions resulting from compiling, modifying, or integrating this code. 
-3. **Unaudited Code:** This module is an educational proof-of-concept and has not undergone formal security audits.
-4. Do not use in production environments holding real financial value.
+```text
+{"command":"get_status"}
+{"command":"get_balance","address":"oorush1..."}
+{"command":"get_chain"}
+{"command":"submit_transaction","transaction":{...}}
+{"command":"produce_block"}
+```
+
+`submit_transaction` validates the signature, ownership, inputs, and pending
+double-spends before persistence. `produce_block` signs and validates a block
+with the configured wallet, then persists it. With `--peer HOST:PORT`, a
+locally produced block is sent to that peer as the internal
+`submit_block` request; the peer validates it before applying it. This simple
+broadcast is not consensus or fork-choice safety.
+
+For example, with a line-oriented TCP client:
+
+```text
+printf '{"command":"get_status"}\n' | nc 127.0.0.1 18444
+printf '{"command":"get_balance","address":"oorush1..."}\n' | nc 127.0.0.1 18444
+```
+
+Transactions and blocks use the JSON structures in `src/blockchain.rs` and
+must carry valid Dilithium5 signatures. The node serializes access to chain
+state with a mutex and returns explicit errors for malformed or invalid
+requests.
+
+## Wallet and piano artifact
+
+The wallet is Oorush-native and uses Dilithium5. It is not Bitcoin or
+Ethereum-compatible. Wallet files use Argon2id and AES-256-GCM and are never
+overwritten automatically:
+
+```text
+cargo run --bin oorush-wallet -- generate --output node-wallet.json
+```
+
+Private-key output is deliberately opt-in and should not be copied into logs:
+
+```text
+cargo run --bin oorush-wallet -- generate --output node-wallet.json --export-private-key
+```
+
+The original deterministic piano artifact is still available through the demo
+binary. It derives a mono WAV melody from a public-key or public-address seed:
+
+```text
+cargo run --bin demo -- --output oorush_piano.wav
+cargo run --bin demo -- --seed oorush-public-address --output address.wav
+```
+
+## Security and MVP limitations
+
+This is an educational PoA blockchain, not production cryptocurrency software.
+The current implementation has UTXO balances, Dilithium transaction and block
+signatures, encrypted local wallet storage, persisted chain state, and a small
+TCP JSON node. It does **not** yet provide Byzantine fault tolerance, secure
+peer authentication/encryption, peer discovery, fork choice, chain sync,
+finality, validator rotation, fees, mempool gossip, replay protection across
+networks, or audited cryptographic/economic security. Do not use it for real
+funds before independent review and a threat-model-driven redesign.

@@ -22,12 +22,12 @@ jobs:
           profile: minimal
           override: true
 
-      - name: Build node.exe
-        run: cargo build --bin node --release
+      - name: Build oorush-node.exe
+        run: cargo build --bin oorush-node --release
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v1
         with:
-          files: target/release/node.exe
+           files: target/release/oorush-node.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

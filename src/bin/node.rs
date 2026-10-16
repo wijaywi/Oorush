@@ -1,28 +1,32 @@
-use anyhow::Result;
-use coiwin::pqc::dilithium_precompile;
-use pqcrypto_traits::sign::{PublicKey, SecretKey};
+use clap::Parser;
+use oorush::node::{run, NodeConfig};
+use std::path::PathBuf;
 
-fn main() -> Result<()> {
-    println!("=== Coiwin Quantum-Resistant Cryptography Library ===");
-    println!("This binary serves as a simple demonstration of Dilithium signatures.\n");
+#[derive(Parser, Debug)]
+#[command(
+    name = "oorush-node",
+    about = "Educational Oorush proof-of-authority node"
+)]
+struct Cli {
+    #[arg(long, default_value = "127.0.0.1:18444")]
+    listen: String,
+    #[arg(long, default_value = "oorush-chain.json")]
+    state: PathBuf,
+    #[arg(long, default_value = "oorush-wallet.json")]
+    wallet: PathBuf,
+    #[arg(long, default_value_t = 1_000_000)]
+    initial_balance: u64,
+    #[arg(long)]
+    peer: Option<String>,
+}
 
-    println!("[1] Generating Dilithium Keypair...");
-    let (pk, sk) = dilithium_precompile::generate_keypair();
-    println!("Public Key generated ({} bytes)", pk.as_bytes().len());
-    println!("Secret Key generated ({} bytes)\n", sk.as_bytes().len());
-
-    let message = b"Hello, Quantum World!";
-    println!("[2] Signing message: {:?}", std::str::from_utf8(message).unwrap());
-    let signature = dilithium_precompile::sign_detached(&sk, message)?;
-    println!("Signature created ({} bytes)\n", signature.len());
-
-    println!("[3] Verifying signature...");
-    let is_valid = dilithium_precompile::verify_dilithium(&pk, message, &signature)?;
-    if is_valid {
-        println!("Result: VERIFICATION SUCCESSFUL! The signature is valid.");
-    } else {
-        println!("Result: VERIFICATION FAILED!");
-    }
-
-    Ok(())
+fn main() -> anyhow::Result<()> {
+    let cli = Cli::parse();
+    run(NodeConfig {
+        listen: cli.listen,
+        state: cli.state,
+        wallet: cli.wallet,
+        initial_balance: cli.initial_balance,
+        peer: cli.peer,
+    })
 }

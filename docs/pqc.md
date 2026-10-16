@@ -1,16 +1,18 @@
-# PQC (Post-Quantum Cryptography) - Coiwin- PoC
+# PQC (Post-Quantum Cryptography) - Oorush- PoC
 
-This document describes a Proof-of-Concept (PoC) for integrating post-quantum cryptography algorithms into the Coiwin- project.
+This document describes the post-quantum cryptography used by the Oorush blockchain MVP.
 
 ## Goals
 - Provide a PoC for post-quantum signatures (Dilithium) and key exchange (Kyber).
 - Demonstrate a hybrid approach: classic (secp256k1) + PQC (Dilithium).
-- Develop a roadmap for developing PQC features in Coiwin-.
+- Use Dilithium5 signatures for wallet identities, transactions, and PoA blocks.
+- Use Kyber512 for the standalone key-exchange demonstration.
 
 ## Related Files
-- `Coiwin-/pqc/dilithium_precompile.rs` - Rust PoC module for Dilithium verification.
-- `.github/workflows/pqc-tests.yml` - workflow for automated tests.
-- `README.md` - main project description.
+- `src/pqc/dilithium_precompile.rs` - Dilithium signing and verification.
+- `src/blockchain.rs` - signed UTXO transactions and PoA blocks.
+- `src/wallet.rs` - encrypted wallet storage and address derivation.
+- `README.md` - build and node usage.
 
 ## ⚙️ Example configuration (draft)
 ```yaml

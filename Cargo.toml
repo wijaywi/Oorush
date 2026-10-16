@@ -1,22 +1,32 @@
 [package]
-name = "coiwin"
+name = "oorush"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 anyhow = "1"
+aes-gcm = "0.10"
+argon2 = "0.5"
 pqcrypto-dilithium = "0.5"
 pqcrypto-kyber = "0.8"
 clap = { version = "4.4", features = ["derive"] }
-k256 = { version = "0.13", features = ["ecdsa"] }
 pqcrypto-traits = "*"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rand = "0.8"
 hex = "0.4"
 sha2 = "0.10"
-chrono = "0.4"
+rpassword = "7"
+zeroize = "1"
 [features]
 default = []
 pqc-dilithium = []
 pqc-kyber = []
+
+[[bin]]
+name = "oorush-wallet"
+path = "src/bin/wallet.rs"
+
+[[bin]]
+name = "oorush-node"
+path = "src/bin/node.rs"

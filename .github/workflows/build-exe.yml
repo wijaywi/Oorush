@@ -18,11 +18,11 @@ jobs:
         toolchain: stable
         targets: x86_64-pc-windows-msvc
 
-    - name: Build Node (Release)
-      run: cargo build --release --bin node --features pqc-dilithium
+    - name: Build Oorush PoA Node (Release)
+      run: cargo build --release --bin oorush-node
 
     - name: Upload EXE Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: coiwin-node-windows
-        path: target/release/node.exe
+           name: oorush-node-windows
+           path: target/release/oorush-node.exe
