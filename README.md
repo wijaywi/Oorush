@@ -24,11 +24,30 @@ The current binaries use command-line arguments rather than loading a dotenv
 file; copy the example only if you need a local settings reference, and never
 put wallet passwords or private keys in it.
 
-## Netlify landing page
+## Netlify network dashboard
 
-The repository also contains a static landing page in `public/index.html`.
-`netlify.toml` configures Netlify to publish that folder, so use these settings
-when connecting the repository:
+`public/index.html` is a responsive network dashboard. It shows a clearly
+labelled demo stream until a live HTTP status source is configured. Netlify
+cannot run the Rust node or connect to its loopback-only TCP socket. To show
+real data, deploy a separate authenticated read-only HTTP gateway next to the
+nodes and set the Netlify environment variable `OORUSH_STATUS_URL` to its
+HTTPS URL. The included `netlify/functions/network-status.js` proxies that
+document at `/api/network-status`; it never receives wallet keys or signs
+transactions.
+
+The gateway should return JSON with these optional fields:
+
+```json
+{"height":12842,"healthyNodes":18,"transactionsPerHour":1284,"blockTime":"18.6s"}
+```
+
+For a direct test endpoint, use `?api=https://gateway.example/status` in the
+dashboard URL. Do not expose the unauthenticated TCP node publicly. The
+dashboard is observational only; mining and transaction submission still occur
+on the Rust nodes.
+
+`netlify.toml` configures Netlify to publish the dashboard and its function, so
+use these settings when connecting the repository:
 
 ```text
 Base directory:      (empty)
@@ -37,9 +56,9 @@ Publish directory:   public
 Functions directory: netlify/functions
 ```
 
-Netlify hosts this landing page only. The Rust blockchain node still requires
-Docker or another long-running server environment and is not started by
-Netlify.
+Netlify hosts the dashboard and proxy only. The Rust blockchain node still
+requires Docker or another long-running server environment and is not started
+by Netlify.
 
 The node protocol has no transport authentication. The node therefore accepts
 only loopback listen addresses (`127.0.0.1`, `::1`, or another loopback IP) by
