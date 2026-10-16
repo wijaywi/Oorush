@@ -5,6 +5,11 @@ a small proof-of-authority TCP node. It is intentionally an MVP: it does not
 provide Byzantine fault tolerance, fork choice, finality, peer discovery,
 transport security, or production authentication.
 
+The node protocol has no transport authentication. The node therefore accepts
+only loopback listen addresses (`127.0.0.1`, `::1`, or another loopback IP) by
+default; do not expose it on a LAN or the public internet. Adding remote access
+requires implementing and reviewing transport authentication first.
+
 ## Start a node
 
 First create an encrypted wallet (the password is read without echo):
@@ -24,12 +29,15 @@ On first start, the node creates a deterministic genesis (timestamp zero)
 allocating `--initial-balance` to the wallet address. It uses create-new
 semantics for that initial state file; an existing state is loaded and is not
 replaced by genesis. Subsequent validated changes are persisted to the state
-file.
+file. State writes use a synced temporary file and a `.bak` recovery copy; a
+malformed primary state is rejected and a validated backup is attempted.
 
 ## TCP protocol
 
 The protocol is newline-delimited UTF-8 JSON over TCP. Requests and responses
-are one JSON object per line; requests are limited to 1 MiB. Successful
+are one JSON object per line; requests are limited to 1 MiB and responses to
+8 MiB. Connections have bounded read/write timeouts and are served by a fixed
+worker pool with a bounded queue. Successful
 responses have `{"ok":true,"result":...}` and failures have
 `{"ok":false,"error":"..."}`.
 
