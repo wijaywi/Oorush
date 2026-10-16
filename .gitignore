@@ -1,2 +1,9 @@
 # Compiled Rust output
 /target/
+
+# Local runtime data and secrets
+/oorush-data/
+.env
+!.env.example
+*.wallet.json
+*.chain.json
