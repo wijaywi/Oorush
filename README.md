@@ -24,6 +24,23 @@ The current binaries use command-line arguments rather than loading a dotenv
 file; copy the example only if you need a local settings reference, and never
 put wallet passwords or private keys in it.
 
+## Netlify landing page
+
+The repository also contains a static landing page in `public/index.html`.
+`netlify.toml` configures Netlify to publish that folder, so use these settings
+when connecting the repository:
+
+```text
+Base directory:      (empty)
+Build command:       (empty)
+Publish directory:   public
+Functions directory: netlify/functions
+```
+
+Netlify hosts this landing page only. The Rust blockchain node still requires
+Docker or another long-running server environment and is not started by
+Netlify.
+
 The node protocol has no transport authentication. The node therefore accepts
 only loopback listen addresses (`127.0.0.1`, `::1`, or another loopback IP) by
 default; do not expose it on a LAN or the public internet. Adding remote access
