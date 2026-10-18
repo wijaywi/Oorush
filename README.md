@@ -1,6 +1,6 @@
 # Oorush
 
-**A Post-Quantum blBlockchain framework in Rust where every wallet address has its own piano melody.**
+**A Post-Quantum Blockchain framework in Rust where every wallet address has its own piano melody.**
 
 **Oorush** is an educational blockchain framework built around Dilithium5 post-quantum signatures. Its distinctive feature is the address melody: give Oorush any public key or address and it deterministically composes a short piano piece as a WAV file. The same input always produces the same tune, so every wallet receives a recognizable sound signature.
 
