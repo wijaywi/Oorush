@@ -22,7 +22,7 @@ Underneath, Oorush is a Dilithium5-signed UTXO blockchain with a small proof-of-
 
 ## Highlights
 
-- **Address-to-piano melody.** Turn any public key or address into a deterministic piano melody (mono WAV). The same seed always produces the same tune.
+- **Address-to-piano melody.** Turn any public key or address into a deterministic piano melody (mono WAV).
 - **Post-quantum signatures.** Transactions and blocks are signed with Dilithium5.
 - **UTXO model with proof of authority.** A compact and readable chain design that is easy to study.
 - **Encrypted wallets.** Argon2id key derivation with AES-256-GCM encryption. Wallet files are never overwritten automatically.
