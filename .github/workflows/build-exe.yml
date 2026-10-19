@@ -15,14 +15,17 @@ jobs:
     - name: Set up Rust
       uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: stable
+        toolchain: 1.85.1
         targets: x86_64-pc-windows-msvc
 
     - name: Build Oorush PoA Node (Release)
-      run: cargo build --release --bin oorush-node
+      run: cargo build --locked --release --bin oorush-node --bin oorush-wallet --bin oorush-miner
 
     - name: Upload EXE Artifact
       uses: actions/upload-artifact@v4
       with:
-           name: oorush-node-windows
-           path: target/release/oorush-node.exe
+           name: oorush-windows
+           path: |
+             target/release/oorush-node.exe
+             target/release/oorush-wallet.exe
+             target/release/oorush-miner.exe
