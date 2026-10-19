@@ -3,10 +3,24 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Oorush</title>
+    <meta name="description" content="Oorush combines post-quantum blockchain security with a deterministic piano identity for every public address.">
+    <title>Oorush · Security you can hear</title>
+    <style>
+      :root{color-scheme:dark;--bg:#080d16;--panel:#111d30;--line:#2a4162;--text:#f4f8ff;--muted:#a4b6cd;--cyan:#62dcff;--green:#6ee5ab;--violet:#a995ff}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 80% 0,#263e6a 0,#101b30 35%,var(--bg) 75%);color:var(--text);font:16px/1.55 Inter,system-ui,sans-serif}main{width:min(1100px,calc(100% - 34px));margin:auto;padding:34px 0 64px}.eyebrow{color:var(--cyan);font-size:12px;letter-spacing:.18em;font-weight:850;text-transform:uppercase}.hero{max-width:850px;padding:72px 0 48px}.hero h1{font-size:clamp(44px,8vw,84px);line-height:.95;letter-spacing:-.07em;margin:14px 0 22px}.hero h1 span{color:var(--cyan)}.hero p{color:var(--muted);font-size:20px;max-width:720px}.buttons{display:flex;gap:12px;flex-wrap:wrap;margin-top:28px}.button{display:inline-block;color:#06101b;background:var(--cyan);border:1px solid #a7efff;border-radius:9px;padding:12px 16px;text-decoration:none;font-weight:800}.button.alt{color:var(--text);background:#182942;border-color:#4d6b91}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.card{background:linear-gradient(145deg,#14243b,#0e1726);border:1px solid var(--line);border-radius:17px;padding:23px}.card .icon{font-size:28px}.card h2{font-size:20px;margin:10px 0 7px}.card p{color:var(--muted);margin:0}.note{border-left:3px solid var(--violet);padding:14px 18px;margin-top:25px;color:var(--muted);background:#12182b}@media(max-width:760px){.cards{grid-template-columns:1fr}.hero{padding-top:45px}}
+    </style>
   </head>
   <body>
-    <h1>Oorush</h1>
-    <p>Oorush blockchain node.</p>
+    <div class="eyebrow">OORUSH PROTOCOL · EXPERIMENTAL RUST BLOCKCHAIN</div>
+    <section class="hero">
+      <h1>Security for <span>tomorrow.</span><br>Identity you can hear.</h1>
+      <p>Oorush makes post-quantum cryptography tangible: Dilithium5 protects transaction identity, while every public address deterministically becomes its own piano melody.</p>
+      <div class="buttons"><a class="button" href="public/index.html">Open the live observatory</a><a class="button alt" href="https://github.com/wijaywi/oorush#hear-your-address" rel="noreferrer">Hear an address</a></div>
+    </section>
+    <section class="cards" aria-label="Oorush value proposition">
+      <article class="card"><div class="icon">⌁</div><h2>Post-quantum trust</h2><p>Designed around Dilithium5 signatures so the chain can demonstrate a migration path beyond classical public-key assumptions.</p></article>
+      <article class="card"><div class="icon">♫</div><h2>Piano identity</h2><p>The same public key always creates the same short WAV melody: a memorable, reproducible signature for demos and education.</p></article>
+      <article class="card"><div class="icon">✦</div><h2>More than a claim</h2><p>One project lets people inspect the Rust implementation, run the tests, generate the audio, and see the read-only node view.</p></article>
+    </section>
+    <p class="note"><strong>Important:</strong> Oorush is an educational MVP, not production cryptocurrency software. The melody helps recognition; it is not a security control, and the cryptography is unaudited.</p>
   </body>
 </html>
